@@ -1,0 +1,56 @@
+name: Linux
+
+on: [workflow_dispatch, pull_request]
+
+env:
+  BUILD_TYPE: Release
+  MAKEFLAGS: -j3
+
+jobs:
+  build:
+    name: ${{matrix.config.os}}-${{matrix.config.cc}}-${{matrix.config.ver}}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+           - { os: ubuntu-latest, cc: gcc, cxx: g++, ver: 9, package: g++-9}
+           - { os: ubuntu-latest, cc: gcc, cxx: g++, ver: 10, package: g++-10}
+           - { os: ubuntu-latest, cc: clang, cxx: clang++, ver: 9, package: clang-9}
+           - { os: ubuntu-latest, cc: clang, cxx: clang++, ver: 10, package: clang-10}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Install Packages
+        run: |
+             sudo apt update
+             sudo apt install ${{ matrix.config.package }} \
+                              libboost-dev libboost-thread-dev \
+                              libsdl2-dev libvisa-dev libuv1-dev libfmt-dev
+
+      - name: Install sobjectizer
+        run: |
+             export SO_REPO=$(mktemp -d)
+             git clone --depth 1 https://github.com/Stiffstream/sobjectizer.git $SO_REPO
+             mkdir -p $SO_REPO/dev/so_5/build
+             cd $SO_REPO/dev/so_5/build
+             cmake .. -DSOBJECTIZER_BUILD_STATIC=OFF
+             sudo cmake --build . --target install
+  
+      - name: Run CMake
+        working-directory: ${{github.workspace}}
+        env:
+          CC: ${{ matrix.config.cc }}-${{ matrix.config.ver }}
+          CXX: ${{ matrix.config.cxx }}-${{ matrix.config.ver }}
+        run: |
+             mkdir build
+             cd build
+             cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBUILD_TESTS=ON
+  
+      - name: Build
+        working-directory: ${{github.workspace}}/build
+        run: cmake --build . --config $BUILD_TYPE

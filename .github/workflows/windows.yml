@@ -1,0 +1,41 @@
+name: Windows
+
+on: [workflow_dispatch, pull_request]
+
+env:
+  BUILD_TYPE: Release
+  CL: /MP
+
+jobs:
+  build:
+    name: ${{matrix.config.name}}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+           - { name: "static library and runtime", shared: OFF, static_runtime: ON, triplet: "x64-windows-static"}
+           - { name: "static library", shared: OFF, static_runtime: OFF, triplet: "x64-windows-static-md"}
+           - { name: "share library", shared: ON, static_runtime: OFF, triplet: "x64-windows"}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+             vcpkg --triplet ${{ matrix.config.triplet }} install boost-thread boost-asio sdl2 fmt libuv sobjectizer
+             vcpkg integrate install
+
+      - name: Run CMake
+        working-directory: ${{github.workspace}}
+        run: |
+             mkdir build
+             cd build
+             cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBUILD_TESTS=ON -DBUILD_SHARED_LIBS=${{ matrix.config.shared }} -DUSE_STATIC_RUNTIME=${{ matrix.config.static_runtime }} -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=${{ matrix.config.triplet }}
+
+      - name: Build
+        working-directory: ${{github.workspace}}/build
+        run: cmake --build . --config $BUILD_TYPE
